@@ -1,0 +1,54 @@
+{
+  "name": "netflix-bot-system",
+  "version": "1.0.0",
+  "description": "Sistem Penjualan Netflix Otomatis - Dashboard Admin, Bot Telegram & WhatsApp",
+  "private": true,
+  "scripts": {
+    "install-all": "npm run install-dashboard && npm run install-telegram && npm run install-whatsapp && npm run install-functions",
+    "install-dashboard": "cd dashboard && npm install",
+    "install-telegram": "cd bot/telegram && npm install",
+    "install-whatsapp": "cd bot/whatsapp && npm install",
+    "install-functions": "cd functions && npm install",
+    "dev-dashboard": "cd dashboard && npm run dev",
+    "dev-telegram": "cd bot/telegram && npm run dev",
+    "dev-whatsapp": "cd bot/whatsapp && npm run dev",
+    "dev-functions": "cd functions && npm run serve",
+    "build-dashboard": "cd dashboard && npm run build",
+    "deploy-hosting": "firebase deploy --only hosting",
+    "deploy-functions": "firebase deploy --only functions",
+    "deploy-firestore": "firebase deploy --only firestore:rules,firestore:indexes",
+    "deploy-all": "npm run build-dashboard && firebase deploy",
+    "start-bots": "cd bot && pm2 start ecosystem.config.cjs",
+    "stop-bots": "pm2 stop all",
+    "restart-bots": "pm2 restart all",
+    "logs-bots": "pm2 logs",
+    "status-bots": "pm2 status",
+    "start": "./start.sh",
+    "stop": "./stop.sh",
+    "status": "./status.sh",
+    "setup": "./install-deps.sh"
+  },
+  "keywords": [
+    "netflix",
+    "bot",
+    "telegram",
+    "whatsapp",
+    "firebase",
+    "automation",
+    "sales"
+  ],
+  "author": "Netflix Bot System",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "dependencies": {
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "tailwindcss": "^4.1.18"
+  },
+  "devDependencies": {
+    "pm2": "^6.0.14"
+  }
+}
