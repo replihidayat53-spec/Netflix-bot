@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, BarChart3, Package, Settings, LogOut, Bell, Clock, Users, Megaphone, Ticket } from 'lucide-react';
+import { Plus, BarChart3, Package, Settings, LogOut, Bell, Clock, Users, Megaphone, Ticket, Terminal } from 'lucide-react';
 import { signOut } from 'firebase/auth';
 import { auth } from '../services/firebase';
 import AddAccountModal from '../components/AddAccountModal';
