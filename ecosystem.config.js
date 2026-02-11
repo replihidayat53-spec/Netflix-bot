@@ -17,7 +17,7 @@ module.exports = {
       name: "netflix-dashboard",
       script: "npm",
       args: "run dev",
-      cwd: "./dashboard",
+      cwd: "/home/fearles/netflix-bot/dashboard",
       watch: false,
       ignore_watch: ["node_modules", ".git"],
       env: {

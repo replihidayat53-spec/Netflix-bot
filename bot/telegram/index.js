@@ -13,7 +13,11 @@ import {
   updateBroadcastStatus,
   getPrices,
   deductUserBalance,
-  redeemVoucher
+  redeemVoucher,
+  getOrCreateUser,
+  setReferrer,
+  rewardReferrer,
+  getSettings
 } from './database.js';
 
 dotenv.config();
@@ -64,9 +68,25 @@ const formatRole = (role) => {
 };
 
 // ==================== MIDDLEWARE DEBUG ====================
-bot.use((ctx, next) => {
+bot.use(async (ctx, next) => {
   if (ctx.message && ctx.message.text) {
     console.log(`[DEBUG] Incoming Text: "${ctx.message.text}"`);
+    
+    // Check Maintenance Mode
+    try {
+      const settings = await getSettings();
+      const isAdmin = ctx.from.id.toString() === ADMIN_ID;
+      
+      if (settings?.system?.maintenanceMode && !isAdmin) {
+        return ctx.replyWithHTML(
+          `🚧 <b>MAINTENANCE MODE</b> 🚧\n\n` +
+          `Maaf, bot sedang dalam pemeliharaan rutin untuk meningkatkan layanan.\n\n` +
+          `Silakan coba lagi beberapa saat lagi. Terima kasih atas kesabarannya! 🙏`
+        );
+      }
+    } catch (err) {
+      console.error('Maintenance check error:', err);
+    }
   }
   return next();
 });
@@ -82,11 +102,20 @@ bot.command('start', async (ctx) => {
   let userRole = 'customer';
   
   try {
-    const user = await getUser(ctx.from.id, {
-      first_name: ctx.from.first_name,
-      username: ctx.from.username
-    });
+    const user = await getOrCreateUser(ctx.from);
     userRole = user.role || 'customer';
+
+    // Handle referral param (e.g. /start ref_12345)
+    const startPayload = ctx.payload;
+    if (startPayload && startPayload.startsWith('ref_')) {
+      const referrerId = startPayload.replace('ref_', '');
+      if (referrerId !== userId.toString()) {
+        const success = await setReferrer(userId, referrerId);
+        if (success) {
+          console.log(`[INFO] User ${userId} referred by ${referrerId}`);
+        }
+      }
+    }
   } catch (err) {
     console.error('Error registering user:', err);
   }
@@ -109,15 +138,12 @@ Kami menyediakan akun Netflix Premium Legal & Bergaransi.
 
   welcomeMessage += `\n\n👇 <b>Silakan pilih menu di bawah ini:</b>`;
 
-  let buttons = [
-      ['🛒 Beli Sekarang', '📦 Cek Stok'],
-      ['💰 Daftar Harga', '👤 Profile Saya'],
-      ['🎟️ Redeem Voucher']
-  ];
-
-  if (isResellerOrAdmin) {
-      buttons.push(['💳 Topup Saldo', '💎 Info Reseller']);
-  }
+  const menu = Markup.keyboard([
+    ['🛍️ Beli Akun', '🔍 Cek Stok'],
+    ['💰 Saldo & Profile', '💎 Daftar Harga'],
+    ['🎁 Voucher', '👥 Referral'],
+    ['❓ Bantuan', '🏠 Menu Utama']
+  ]).resize();
   
   // Admin logic: Check .env ID OR Firestore role
   const isAdmin = userId.toString() === ADMIN_ID || userRole === 'admin';
@@ -730,6 +756,9 @@ bot.action(/pay_balance_(.+)/, async (ctx) => {
         await markAccountAsSold(account.id, userId.toString(), userName);
         await updateOrderStatus(orderId, 'paid', true);
         
+        // Reward referrer if applicable
+        await rewardReferrer(userId);
+        
         const accountMessage = `
 ✅ <b>PEMBAYARAN BERHASIL! (SALDO)</b>
 
@@ -794,6 +823,9 @@ bot.action(/confirm_(.+)/, async (ctx) => {
     
     await markAccountAsSold(account.id, userId.toString(), userName);
     await updateOrderStatus(orderId, 'paid', true);
+    
+    // Reward referrer if applicable
+    await rewardReferrer(userId);
     
     const accountMessage = `
 ✅ <b>PEMBAYARAN BERHASIL!</b>
@@ -881,6 +913,121 @@ bot.action(/cancel_(.+)/, async (ctx) => {
 bot.action('cancel', async (ctx) => {
   await ctx.answerCbQuery('Dibatalkan');
   await ctx.deleteMessage();
+});
+
+// ==================== NEW MENU HANDLERS ====================
+
+/**
+ * 💰 Saldo & Profile
+ */
+bot.hears(/Saldo & Profile/i, async (ctx) => {
+  const userId = ctx.from.id;
+  try {
+    const user = await getOrCreateUser(ctx.from);
+    const balance = user.balance || 0;
+    const role = user.role || 'customer';
+    
+    const msg = `
+👤 <b>PROFILE PENGGUNA</b>
+
+🆔 Telegram ID: <code>${userId}</code>
+👤 Nama: <b>${ctx.from.first_name}</b>
+💎 Status: <b>${formatRole(role)}</b>
+💰 Saldo: <b>${formatCurrency(balance)}</b>
+
+🎁 <i>Dapatkan saldo gratis dengan mengajak kawan menggunakan menu Referral!</i>
+`;
+    await ctx.replyWithHTML(msg, Markup.inlineKeyboard([
+      [Markup.button.callback('💳 Topup Saldo', 'topup_info')],
+      [Markup.button.callback('🎟️ Redeem Voucher', 'redeem_info')]
+    ]));
+  } catch (error) {
+    console.error('Error in profile handler:', error);
+    ctx.reply('❌ Gagal mengambil data profile.');
+  }
+});
+
+/**
+ * 👥 Referral Menu
+ */
+bot.hears(/Referral/i, async (ctx) => {
+  const userId = ctx.from.id;
+  const botUsername = ctx.botInfo.username;
+  const refLink = `https://t.me/${botUsername}?start=ref_${userId}`;
+  
+  const msg = `
+👥 <b>PROGRAM REFERRAL</b>
+
+Dapatkan komisi <b>Rp 1.000</b> untuk setiap kawan yang bergabung dan melakukan <b>pembelian pertama</b>!
+
+🔗 <b>Link Referral Anda:</b>
+<code>${refLink}</code>
+
+💡 <b>Cara Kerja:</b>
+1. Share link di atas ke kawan/grup.
+2. Mereka klik link & bergabung di bot.
+3. Saat mereka beli akun pertama kali, saldo Anda bertambah otomatis!
+
+💰 <i>Saldo referral bisa digunakan untuk beli akun gratis.</i>
+`;
+  await ctx.replyWithHTML(msg, Markup.inlineKeyboard([
+    [Markup.button.url('🚀 Bagikan Sekarang', `https://t.me/share/url?url=${encodeURIComponent(refLink)}&text=${encodeURIComponent('Mau Netflix Premium Murah & Legal? Cek di sini!')}`)]
+  ]));
+});
+
+/**
+ * ❓ Bantuan Menu
+ */
+bot.hears(/Bantuan/i, async (ctx) => {
+    const helpMessage = `
+🤖 <b>PUSAT BANTUAN NETFLIX BOT</b>
+
+Silakan pilih topik bantuan di bawah ini:
+`;
+    await ctx.replyWithHTML(helpMessage, Markup.inlineKeyboard([
+        [Markup.button.callback('💳 Cara Order & Bayar', 'help_order')],
+        [Markup.button.callback('🔑 Masalah Login', 'help_login')],
+        [Markup.button.callback('🛡️ Klaim Garansi', 'help_warranty')],
+        [Markup.button.callback('💎 Info Reseller', 'help_reseller')],
+        [Markup.button.callback('👨‍💻 Chat Admin Live', 'help_admin')]
+    ]));
+});
+
+/**
+ * 💎 Daftar Harga Menu
+ */
+bot.hears(/Daftar Harga/i, async (ctx) => {
+    const userId = ctx.from.id;
+    let userRole = 'customer';
+    
+    try {
+        const user = await getOrCreateUser(ctx.from);
+        userRole = user.role || 'customer';
+    } catch (err) {}
+
+    const roleKey = getRoleKey(userRole);
+    const allPrices = await getPrices();
+    const prices = allPrices[roleKey] || allPrices.customer;
+
+    const msg = `
+💎 <b>DAFTAR HARGA ${formatRole(userRole).toUpperCase()}</b>
+
+🍿 Premium (1 Bulan): <b>${formatCurrency(prices.premium)}</b>
+🎬 Standard (1 Bulan): <b>${formatCurrency(prices.standard)}</b>
+📺 Basic (1 Bulan): <b>${formatCurrency(prices.basic)}</b>
+👥 Sharing (1 Bulan): <b>${formatCurrency(prices.sharing || 0)}</b>
+
+✅ <i>Semua harga nett & bergaransi penuh.</i>
+`;
+    await ctx.replyWithHTML(msg);
+});
+
+bot.action('topup_info', (ctx) => {
+    ctx.replyWithHTML(`💳 <b>TOPUP SALDO</b>\n\nUntuk topup saldo silakan hubungi admin di @Revmore16\n\nAtau gunakan menu <b>Redeem Voucher</b> jika memiliki kode promo.`);
+});
+
+bot.action('redeem_info', (ctx) => {
+    ctx.replyWithHTML(`🎟️ <b>REDEEM VOUCHER</b>\n\nKetik: <code>/redeem KODE_VOUCHER</code> untuk klaim saldo.`);
 });
 
 // ==================== ERROR HANDLING ====================

@@ -461,3 +461,102 @@ export const redeemVoucher = async (userId, code) => {
         return { success: true, amount: tVoucher.amount, newBalance };
     });
 };
+
+// ==================== USER & REFERRAL SYSTEM ====================
+
+/**
+ * Get or Create User
+ */
+export const getOrCreateUser = async (user) => {
+    try {
+        const userRef = db.collection('users').doc(user.id.toString());
+        const userDoc = await userRef.get();
+        
+        if (!userDoc.exists) {
+            const userData = {
+                id: user.id,
+                username: user.username || '',
+                first_name: user.first_name || '',
+                balance: 0,
+                role: 'customer',
+                referred_by: null,
+                is_first_buy: true,
+                created_at: admin.firestore.FieldValue.serverTimestamp(),
+                updated_at: admin.firestore.FieldValue.serverTimestamp()
+            };
+            await userRef.set(userData);
+            return userData;
+        }
+        
+        return { id: userDoc.id, ...userDoc.data() };
+    } catch (error) {
+        console.error('Error in getOrCreateUser:', error);
+        return null;
+    }
+};
+
+/**
+ * Set Referrer
+ */
+export const setReferrer = async (userId, referrerId) => {
+    try {
+        if (userId.toString() === referrerId.toString()) return false;
+        
+        const userRef = db.collection('users').doc(userId.toString());
+        const userDoc = await userRef.get();
+        
+        if (userDoc.exists && !userDoc.data().referred_by) {
+            await userRef.update({
+                referred_by: referrerId.toString(),
+                updated_at: admin.firestore.FieldValue.serverTimestamp()
+            });
+            return true;
+        }
+        return false;
+    } catch (error) {
+        console.error('Error setting referrer:', error);
+        return false;
+    }
+};
+
+/**
+ * Reward Referrer (Commission)
+ */
+export const rewardReferrer = async (userId, commissionAmount = 1000) => {
+    try {
+        const userRef = db.collection('users').doc(userId.toString());
+        const userDoc = await userRef.get();
+        
+        if (!userDoc.exists) return;
+        
+        const userData = userDoc.data();
+        const referrerId = userData.referred_by;
+        
+        if (referrerId && userData.is_first_buy) {
+            const referrerRef = db.collection('users').doc(referrerId);
+            await db.runTransaction(async (t) => {
+                const rDoc = await t.get(referrerRef);
+                if (rDoc.exists) {
+                    const rData = rDoc.data();
+                    t.update(referrerRef, {
+                        balance: (rData.balance || 0) + commissionAmount,
+                        updated_at: admin.firestore.FieldValue.serverTimestamp()
+                    });
+                    
+                    // Log referral commission
+                    await db.collection('system_logs').add({
+                        action: 'REFERRAL_COMMISSION',
+                        details: `User ${userId} first buy rewarded ${referrerId} with Rp ${commissionAmount}`,
+                        type: 'info',
+                        created_at: admin.firestore.FieldValue.serverTimestamp()
+                    });
+                }
+            });
+            
+            // Mark as no longer first buy
+            await userRef.update({ is_first_buy: false });
+        }
+    } catch (error) {
+        console.error('Error rewarding referrer:', error);
+    }
+};

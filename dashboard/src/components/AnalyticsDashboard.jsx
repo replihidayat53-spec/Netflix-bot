@@ -6,8 +6,20 @@ import {
   ShoppingCart,
   CheckCircle,
   XCircle,
-  Clock
+  Clock,
+  AlertTriangle
 } from 'lucide-react';
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer,
+  AreaChart,
+  Area
+} from 'recharts';
 import { getAnalytics } from '../services/firestore';
 
 const StatCard = ({ icon: Icon, title, value, subtitle, trend, color = 'netflix-red' }) => {
@@ -137,15 +149,15 @@ const AnalyticsDashboard = () => {
           icon={CheckCircle}
           title="Akun Terjual"
           value={analytics.soldAccounts}
-          subtitle={`${analytics.paidOrders} transaksi lunas`}
+          subtitle={`${analytics.paidOrders} pesanan lunas`}
           color="green"
         />
         
         <StatCard
           icon={DollarSign}
-          title="Total Pendapatan"
+          title="Pendapatan"
           value={formatCurrency(analytics.totalRevenue)}
-          subtitle="Dari penjualan"
+          subtitle={`Rata-rata ${analytics.paidOrders > 0 ? formatCurrency(analytics.totalRevenue / analytics.paidOrders) : 'Rp 0'}/order`}
           color="netflix-red"
         />
         
@@ -153,58 +165,195 @@ const AnalyticsDashboard = () => {
           icon={ShoppingCart}
           title="Total Pesanan"
           value={analytics.totalOrders}
-          subtitle={`${analytics.paidOrders} lunas`}
+          subtitle={`${analytics.paidOrders} lunas | ${analytics.totalOrders - analytics.paidOrders} pending`}
           color="purple"
         />
       </div>
-      
-      {/* Stock by Package Type */}
-      <div className="card">
-        <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-          <Package className="w-5 h-5" />
-          Stok per Paket
-        </h3>
-        
-        <div className="space-y-4">
-          {Object.entries(analytics.accountsByPackage).map(([packageType, stats]) => (
-            <div key={packageType} className="border border-dark-border rounded-lg p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h4 className="font-semibold capitalize text-lg">{packageType}</h4>
-                  <p className="text-sm text-netflix-lightGray">
-                    Total: {stats.total} akun
-                  </p>
-                </div>
-                <div className="text-right">
-                  <div className="text-2xl font-bold text-green-500">{stats.ready}</div>
-                  <div className="text-xs text-netflix-lightGray">Siap Jual</div>
-                </div>
-              </div>
-              
-              {/* Progress Bar */}
-              <div className="w-full bg-dark-hover rounded-full h-2 overflow-hidden">
-                <div
-                  className="bg-netflix-red h-full transition-all duration-500"
-                  style={{ width: `${(stats.ready / stats.total) * 100}%` }}
+
+      {/* Stock Alerts */}
+      <div className="flex flex-wrap gap-4">
+        {Object.entries(analytics.accountsByPackage).some(([_, s]) => s.ready < 5) && (
+          <div className="w-full flex items-center gap-3 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl animate-pulse">
+            <AlertTriangle className="text-yellow-500 w-5 h-5" />
+            <p className="text-sm text-yellow-200">
+              <span className="font-bold">Peringatan:</span> Beberapa paket memiliki stok rendah (dibawah 5). Harap segera restok!
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Charts Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 card">
+          <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-white">
+            <TrendingUp className="w-5 h-5 text-netflix-red" />
+            Tren Pendapatan (7 Hari Terakhir)
+          </h3>
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={analytics.chartData}>
+                <defs>
+                  <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#E50914" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#E50914" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#2D2D2D" vertical={false} />
+                <XAxis 
+                  dataKey="name" 
+                  stroke="#6B7280" 
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
                 />
+                <YAxis 
+                  stroke="#6B7280" 
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(value) => `Rp ${value/1000}k`}
+                />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#1A1A1A', border: '1px solid #2D2D2D', borderRadius: '8px' }}
+                  itemStyle={{ color: '#E50914' }}
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="value" 
+                  stroke="#E50914" 
+                  strokeWidth={3}
+                  fillOpacity={1} 
+                  fill="url(#colorRevenue)" 
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="card">
+          <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-white">
+            <Package className="w-5 h-5 text-blue-400" />
+            Distribusi Paket
+          </h3>
+          <div className="space-y-4">
+             {Object.entries(analytics.accountsByPackage).map(([pkg, stats]) => (
+               <div key={pkg} className="flex flex-col gap-2">
+                 <div className="flex justify-between text-sm">
+                   <span className="capitalize text-gray-400">{pkg}</span>
+                   <span className="text-white font-bold">{stats.total} Akun</span>
+                 </div>
+                 <div className="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden">
+                   <div 
+                    className="bg-netflix-red h-full" 
+                    style={{ width: `${(stats.total / analytics.totalAccounts) * 100}%` }}
+                   />
+                 </div>
+               </div>
+             ))}
+          </div>
+        </div>
+      </div>
+      
+      {/* Stock by Package Type Monitoring */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 card">
+          <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+            <Package className="w-5 h-5 text-netflix-red" />
+            Monitoring Stok Akun
+          </h3>
+          
+          <div className="space-y-6">
+            {Object.entries(analytics.accountsByPackage).map(([packageType, stats]) => (
+              <div key={packageType} className="bg-gray-800/20 rounded-xl p-5 border border-gray-800/50">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h4 className="font-bold capitalize text-lg text-white">{packageType}</h4>
+                    <p className="text-sm text-gray-400">
+                      Total {stats.total} Akun di Database
+                    </p>
+                  </div>
+                  <div className="flex gap-4">
+                    <div className="text-right border-r border-gray-700 pr-4">
+                      <div className="text-xl font-black text-green-400">{stats.ready}</div>
+                      <div className="text-[10px] uppercase font-bold text-gray-500">Ready</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xl font-black text-netflix-red">{stats.sold}</div>
+                      <div className="text-[10px] uppercase font-bold text-gray-500">Terjual</div>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Progress Bar */}
+                <div className="w-full bg-gray-800 rounded-full h-2.5 overflow-hidden flex">
+                  <div
+                    className="bg-green-500 h-full transition-all duration-1000"
+                    style={{ width: `${(stats.ready / stats.total) * 100}%` }}
+                    title={`Ready: ${stats.ready}`}
+                  />
+                  <div
+                    className="bg-netflix-red h-full transition-all duration-1000 opacity-80"
+                    style={{ width: `${(stats.sold / stats.total) * 100}%` }}
+                    title={`Sold: ${stats.sold}`}
+                  />
+                </div>
+                
+                <div className="flex items-center justify-between mt-3 text-xs">
+                  <span className="text-gray-400">
+                    Stok Tersisa: <span className={`font-bold ${stats.ready < 5 ? 'text-red-500' : 'text-green-500'}`}>{stats.ready}</span>
+                  </span>
+                  <span className="text-yellow-400 font-medium">
+                    {stats.total - stats.ready - stats.sold} Sedang Diproses
+                  </span>
+                </div>
               </div>
-              
-              <div className="flex items-center justify-between mt-2 text-xs text-netflix-lightGray">
-                <span className="flex items-center gap-1">
-                  <CheckCircle className="w-3 h-3 text-green-500" />
-                  {stats.ready} Ready
-                </span>
-                <span className="flex items-center gap-1">
-                  <XCircle className="w-3 h-3 text-red-500" />
-                  {stats.sold} Sold
-                </span>
-                <span className="flex items-center gap-1">
-                  <Clock className="w-3 h-3 text-yellow-500" />
-                  {stats.total - stats.ready - stats.sold} Processing
+            ))}
+          </div>
+        </div>
+
+        <div className="card h-full">
+          <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-green-400" />
+            Ringkasan Keuangan
+          </h3>
+          
+          <div className="space-y-6">
+            <div className="p-4 bg-gray-800/30 rounded-xl border border-gray-700/30">
+              <p className="text-sm text-gray-400 mb-1">Total Omzet (Lunas)</p>
+              <p className="text-2xl font-black text-white">{formatCurrency(analytics.totalRevenue)}</p>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-400">Total Pesanan</span>
+                <span className="text-white font-bold">{analytics.totalOrders}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-400">Pesanan Berhasil</span>
+                <span className="text-green-400 font-bold">{analytics.paidOrders}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-400">Tingkat Konversi</span>
+                <span className="text-blue-400 font-bold">
+                  {analytics.totalOrders > 0 ? Math.round((analytics.paidOrders / analytics.totalOrders) * 100) : 0}%
                 </span>
               </div>
             </div>
-          ))}
+
+            <div className="pt-4 border-t border-gray-800">
+              <p className="text-[10px] uppercase font-black text-gray-500 mb-4 tracking-widest">Informasi Tambahan</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 bg-gray-900 rounded-lg">
+                  <p className="text-[10px] text-gray-500 mb-1">PROSES</p>
+                  <p className="text-lg font-bold text-yellow-500">{analytics.totalOrders - analytics.paidOrders}</p>
+                </div>
+                <div className="p-3 bg-gray-900 rounded-lg">
+                  <p className="text-[10px] text-gray-500 mb-1">DELIVERED</p>
+                  <p className="text-lg font-bold text-green-500">{analytics.soldAccounts}</p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

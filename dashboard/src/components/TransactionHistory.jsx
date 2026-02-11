@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, Search, Filter, Download, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { Clock, Search, Filter, Download, CheckCircle, XCircle, AlertCircle, Eye, User, Mail, Shield } from 'lucide-react';
 import { subscribeToOrders } from '../services/firestore';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
@@ -9,6 +9,7 @@ const TransactionHistory = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [selectedOrder, setSelectedOrder] = useState(null);
 
   useEffect(() => {
     const unsubscribe = subscribeToOrders((ordersData) => {
@@ -68,7 +69,7 @@ const TransactionHistory = () => {
     pending: orders.filter(o => o.payment_status === 'pending').length,
     revenue: orders
       .filter(o => o.payment_status === 'paid')
-      .reduce((sum, o) => sum + (o.price || 0), 0)
+      .reduce((sum, o) => sum + (Number(o.price) || 0), 0)
   };
 
   if (loading) {
@@ -153,7 +154,8 @@ const TransactionHistory = () => {
                 <th className="text-left py-4 px-4 text-sm font-semibold text-gray-400">Paket</th>
                 <th className="text-left py-4 px-4 text-sm font-semibold text-gray-400">Harga</th>
                 <th className="text-left py-4 px-4 text-sm font-semibold text-gray-400">Status</th>
-                <th className="text-left py-4 px-4 text-sm font-semibold text-gray-400">Akun Terkirim</th>
+                <th className="text-left py-4 px-4 text-sm font-semibold text-gray-400">Akun</th>
+                <th className="text-center py-4 px-4 text-sm font-semibold text-gray-400">Aksi</th>
               </tr>
             </thead>
             <tbody>
@@ -185,18 +187,13 @@ const TransactionHistory = () => {
                     <td className="py-4 px-4">
                       {getStatusBadge(order.payment_status)}
                     </td>
-                    <td className="py-4 px-4">
-                      {order.account_sent ? (
-                        <span className="inline-flex items-center gap-1 text-green-400 text-sm">
-                          <CheckCircle className="w-4 h-4" />
-                          Ya
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-gray-500 text-sm">
-                          <XCircle className="w-4 h-4" />
-                          Belum
-                        </span>
-                      )}
+                    <td className="py-4 px-4 text-center">
+                      <button 
+                        onClick={() => setSelectedOrder(order)}
+                        className="p-2 hover:bg-white/10 rounded-lg transition-colors text-gray-400 hover:text-white"
+                      >
+                        <Eye className="w-5 h-5" />
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -210,6 +207,76 @@ const TransactionHistory = () => {
       {filteredOrders.length > 0 && (
         <div className="flex items-center justify-between text-sm text-gray-400">
           <p>Menampilkan {filteredOrders.length} dari {orders.length} transaksi</p>
+        </div>
+      )}
+      {/* Detail Modal */}
+      {selectedOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#1A1A1A] w-full max-w-lg rounded-2xl border border-gray-800 shadow-2xl overflow-hidden animate-zoom-in">
+            <div className="p-6 border-b border-gray-800 flex justify-between items-center">
+              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                <Eye className="w-5 h-5 text-netflix-red" />
+                Detail Transaksi
+              </h3>
+              <button onClick={() => setSelectedOrder(null)} className="text-gray-400 hover:text-white">
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800">
+                  <p className="text-xs text-gray-500 uppercase font-black mb-1">Status</p>
+                  {getStatusBadge(selectedOrder.payment_status)}
+                </div>
+                <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800">
+                  <p className="text-xs text-gray-500 uppercase font-black mb-1">Nominal</p>
+                  <p className="text-lg font-bold text-white">{formatCurrency(selectedOrder.price || 0)}</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-start gap-4">
+                  <div className="p-2 bg-blue-500/10 rounded-lg"><User className="w-5 h-5 text-blue-400" /></div>
+                  <div>
+                    <p className="text-sm font-bold text-white">{selectedOrder.buyer_name || 'Customer'}</p>
+                    <p className="text-xs text-gray-400">ID: {selectedOrder.buyer_id} @{selectedOrder.buyer_username || 'n/a'}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-4">
+                  <div className="p-2 bg-purple-500/10 rounded-lg"><Mail className="w-5 h-5 text-purple-400" /></div>
+                  <div className="flex-1">
+                    <p className="text-xs text-gray-500 uppercase mb-1">Info Akun Netflix</p>
+                    {selectedOrder.account_sent ? (
+                      <div className="bg-gray-900 p-3 rounded-lg border border-gray-800 font-mono text-sm">
+                        <p className="text-gray-300">Email: {selectedOrder.account_email || 'Cek Database Inventory'}</p>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-yellow-500 italic">Belum ada akun yang dikirim</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-4">
+                  <div className="p-2 bg-green-500/10 rounded-lg"><Clock className="w-5 h-5 text-green-400" /></div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase">Waktu Transaksi</p>
+                    <p className="text-sm text-white font-medium">{formatDate(selectedOrder.created_at)}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-gray-800">
+                 <div className="flex items-center gap-2 p-3 bg-netflix-red/5 border border-netflix-red/20 rounded-lg">
+                    <Shield className="w-4 h-4 text-netflix-red" />
+                    <p className="text-[10px] text-netflix-red leading-tight">
+                      Order ID: <code>{selectedOrder.id}</code>
+                    </p>
+                 </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

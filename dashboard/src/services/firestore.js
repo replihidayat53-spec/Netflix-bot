@@ -231,9 +231,6 @@ export const subscribeToOrders = (callback) => {
 
 // ==================== ANALYTICS ====================
 
-/**
- * Get Analytics Data
- */
 export const getAnalytics = async () => {
   try {
     const [inventorySnapshot, ordersSnapshot] = await Promise.all([
@@ -253,11 +250,11 @@ export const getAnalytics = async () => {
     const paidOrders = orders.filter(order => order.payment_status === 'paid').length;
     const totalRevenue = orders
       .filter(order => order.payment_status === 'paid')
-      .reduce((sum, order) => sum + (order.price || 0), 0);
+      .reduce((sum, order) => sum + (Number(order.price) || 0), 0);
     
     // Group by package type
     const accountsByPackage = inventory.reduce((acc, account) => {
-      const pkg = account.package_type || 'premium';
+      const pkg = (account.package_type || 'premium').toLowerCase();
       if (!acc[pkg]) {
         acc[pkg] = { total: 0, ready: 0, sold: 0 };
       }
@@ -266,7 +263,23 @@ export const getAnalytics = async () => {
       if (account.status === 'sold') acc[pkg].sold++;
       return acc;
     }, {});
-    
+
+    // Monthly/Daily Revenue (Simulated from orders)
+    const salesData = orders
+      .filter(order => order.payment_status === 'paid' && order.created_at)
+      .reduce((acc, order) => {
+        const date = order.created_at.toDate ? order.created_at.toDate() : new Date(order.created_at);
+        const day = date.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
+        if (!acc[day]) acc[day] = 0;
+        acc[day] += Number(order.price) || 0;
+        return acc;
+      }, {});
+
+    const chartData = Object.entries(salesData)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a,b) => new Date(a.name) - new Date(b.name))
+      .slice(-7); // Last 7 days
+
     return {
       totalAccounts,
       readyAccounts,
@@ -274,12 +287,50 @@ export const getAnalytics = async () => {
       totalOrders,
       paidOrders,
       totalRevenue,
-      accountsByPackage
+      accountsByPackage,
+      chartData // Added for chart
     };
   } catch (error) {
     console.error('Error getting analytics:', error);
     throw error;
   }
+};
+
+// ==================== SYSTEM LOGS ====================
+
+/**
+ * Log System Activity
+ */
+export const logActivity = async (action, details, type = 'info') => {
+  try {
+    await addDoc(collection(db, 'system_logs'), {
+      action,
+      details,
+      type, // 'info', 'warning', 'error', 'admin'
+      created_at: serverTimestamp()
+    });
+  } catch (error) {
+    console.error('Error logging activity:', error);
+  }
+};
+
+/**
+ * Subscribe to System Logs
+ */
+export const subscribeToLogs = (callback) => {
+  const q = query(
+    collection(db, 'system_logs'),
+    orderBy('created_at', 'desc'),
+    limit(50)
+  );
+  
+  return onSnapshot(q, (snapshot) => {
+    const logs = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    callback(logs);
+  });
 };
 
 // ==================== SETTINGS ====================

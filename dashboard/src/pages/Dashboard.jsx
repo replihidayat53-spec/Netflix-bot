@@ -10,6 +10,7 @@ import BroadcastPage from '../components/BroadcastPage';
 import SettingsPage from '../components/SettingsPage';
 import TransactionHistory from '../components/TransactionHistory';
 import VoucherManager from '../components/VoucherManager';
+import SystemLogs from '../components/SystemLogs';
 import toast from 'react-hot-toast';
 
 const Dashboard = () => {
@@ -27,12 +28,13 @@ const Dashboard = () => {
 
   const tabs = [
     { id: 'analytics', label: 'Dashboard', icon: BarChart3, description: 'Lihat statistik & analytics' },
+    { id: 'settings', label: 'Settings', icon: Settings, description: 'Pengaturan sistem' },
+    { id: 'logs', label: 'Logs', icon: Terminal, description: 'Aktivitas sistem' },
     { id: 'inventory', label: 'Inventory', icon: Package, description: 'Kelola akun Netflix' },
     { id: 'users', label: 'Users', icon: Users, description: 'Manajemen Reseller & Member' },
     { id: 'transactions', label: 'Transaksi', icon: Clock, description: 'Riwayat transaksi' },
     { id: 'vouchers', label: 'Voucher', icon: Ticket, description: 'Kelola kode promo' },
-    { id: 'broadcast', label: 'Broadcast', icon: Megaphone, description: 'Kirim pesan massal' },
-    { id: 'settings', label: 'Settings', icon: Settings, description: 'Pengaturan sistem' }
+    { id: 'broadcast', label: 'Broadcast', icon: Megaphone, description: 'Kirim pesan massal' }
   ];
 
   const currentTab = tabs.find(t => t.id === activeTab);
@@ -76,6 +78,14 @@ const Dashboard = () => {
               </button>
 
               {/* Notifications */}
+              <button 
+                onClick={() => setActiveTab('settings')}
+                className={`p-2.5 rounded-xl transition-colors relative ${activeTab === 'settings' ? 'bg-netflix-red/20 text-netflix-red' : 'hover:bg-gray-800 text-gray-400'}`}
+                title="Settings"
+              >
+                <Settings className="w-5 h-5" />
+              </button>
+
               <button className="p-2.5 hover:bg-gray-800 rounded-xl transition-colors relative">
                 <Bell className="w-5 h-5 text-gray-400" />
                 <span className="absolute top-1 right-1 w-2 h-2 bg-netflix-red rounded-full"></span>
@@ -124,10 +134,9 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Tab Navigation */}
       <div className="bg-gray-900/30 border-b border-gray-800/50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+        <div className="max-w-7xl mx-auto px-2">
+          <div className="flex gap-0.5 overflow-x-auto scrollbar-thin pb-1">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -136,24 +145,26 @@ const Dashboard = () => {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-6 py-4 font-semibold transition-all relative whitespace-nowrap group ${
+                  className={`flex items-center gap-1 px-3 py-3 font-semibold transition-all relative whitespace-nowrap group ${
                     isActive
                       ? 'text-white'
                       : 'text-gray-400 hover:text-white'
                   }`}
                 >
-                  <Icon className={`w-5 h-5 transition-all ${
+                  <Icon className={`w-3.5 h-3.5 transition-all ${
                     isActive ? 'text-netflix-red' : 'text-gray-500 group-hover:text-gray-300'
                   }`} />
-                  <span>{tab.label}</span>
+                  <span className="text-[11px] sm:text-xs">{tab.label}</span>
                   
                   {/* Active Indicator */}
                   {isActive && (
-                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-netflix-red to-red-600 rounded-t-full"></div>
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-netflix-red to-red-600 rounded-t-full"></div>
                   )}
                 </button>
               );
             })}
+            {/* Spacer for better scrolling on mobile */}
+            <div className="w-10 shrink-0"></div>
           </div>
         </div>
       </div>
@@ -167,6 +178,7 @@ const Dashboard = () => {
           {activeTab === 'transactions' && <TransactionHistory />}
           {activeTab === 'vouchers' && <VoucherManager />}
           {activeTab === 'broadcast' && <BroadcastPage />}
+          {activeTab === 'logs' && <SystemLogs />}
           {activeTab === 'settings' && <SettingsPage />}
         </div>
       </main>
